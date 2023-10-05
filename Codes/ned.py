@@ -10,6 +10,8 @@ import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
 te = importr("RTransferEntropy")
 
+from nxviz.plots import CircosPlot
+
 class VG_Modules_Model1(object):
     def __init__(self):
         self.bw = 1
@@ -409,7 +411,44 @@ class Net_moduls(object):
             except :
                 result_number_of_edges.append(np.nan)
         return trained_trhesholds[np.where(np.array(result_number_of_edges) >= threshold)[0][-1]]
+    
+    def find_median_pearson_threshold(self,df):
+        df_corr = df.corr(method ='pearson')  
+        df_corr_flatten = np.array(df_corr).flatten()
+        df_corr_flatten_nonNan = df_corr_flatten[~np.isnan(df_corr_flatten)]
+        df_corr_flatten_nonNan.sort()
+        median_corr_coef = np.median(df_corr_flatten_nonNan)
+        return median_corr_coef
 
+    def find_median_entropy_threshold(self,df):
+        te_list = []
+        for c1 in range(df.columns.size):
+            for c2 in range(df.columns.size):
+                te_list.append(te.calc_te(robjects.FloatVector(df[df.columns[c1]].values), robjects.FloatVector(df[df.columns[c2]].values))[0])
+        te_list = np.array(te_list).reshape((df.columns.size, df.columns.size))
+        df_corr_flatten = np.array(te_list).flatten()
+        df_corr_flatten_nonNan = df_corr_flatten[~np.isnan(df_corr_flatten)]
+        df_corr_flatten_nonNan.sort()
+        median_corr_coef = np.median(df_corr_flatten_nonNan)
+        return median_corr_coef
+    
+    def find_median_crossed_threshold(self,df):
+        cross_offsets = []
+        for i in range(len(df.columns)):
+            for j in range(len(df.columns)):
+                seconds = 5
+                fps = 30
+                rs = [self.crosscorr(df[df.columns[i]],df[df.columns[j]], lag) for lag in range(-int(seconds*fps),int(seconds*fps+1))]
+                offset = np.floor(len(rs)/2)-np.argmax(rs)
+                cross_offsets.append(offset)
+        cross_offsets = np.array(cross_offsets)
+        cross_offsets = cross_offsets[cross_offsets>0]
+        df_corr_flatten_nonNan = cross_offsets[~np.isnan(cross_offsets)]
+        df_corr_flatten_nonNan.sort()
+        df_corr_flatten_nonNan = df_corr_flatten_nonNan/max(df_corr_flatten_nonNan)
+        median_corr_coef = np.median(df_corr_flatten_nonNan)
+        return median_corr_coef
+    
     def find_ent_thr_period(self, df):
         te_list = []
         for c1 in range(df.columns.size):
@@ -431,6 +470,14 @@ class Net_moduls(object):
             except :
                 result_number_of_edges.append(np.nan)
         return trained_trhesholds[np.where(np.array(result_number_of_edges) >= threshold)[0][-1]]
+    
+    def crosscorr(self,datax, datay, lag=0, wrap=False):
+        if wrap:
+            shiftedy = datay.shift(lag)
+            transfer_entropy_dfshiftedy.iloc[:lag] = datay.iloc[-lag:].values
+            return datax.corr(shiftedy)
+        else:
+            return datax.corr(datay.shift(lag))
 
     def construct_network(self, df, method, threshold):
         if method == 'pearson':
@@ -492,6 +539,44 @@ class Net_moduls(object):
 
             G_ent = nx.from_pandas_edgelist(df_graph, 'from', 'to')
             return G_ent
+        
+        if method == 'crossed':
+            cross_offsets = []
+            for i in range(len(df.columns)):
+                for j in range(len(df.columns)):
+                    seconds = 5
+                    fps = 30
+                    rs = [self.crosscorr(df[df.columns[i]],df[df.columns[j]], lag) for lag in range(-int(seconds*fps),int(seconds*fps+1))]
+                    offset = np.floor(len(rs)/2)-np.argmax(rs)
+                    cross_offsets.append(offset)
+            cross_offsets = np.array(cross_offsets)
+            cross_offsets = cross_offsets/max(cross_offsets)
+            crossed_offset_matrix = cross_offsets.reshape((df.shape[1],df.shape[1]))
+            crossed_df = pd.DataFrame(crossed_offset_matrix , columns=(df.columns)).set_index(df.columns)
+            df_cc = crossed_df
+
+
+            # apply corr coeff threshold and create new df
+            list_symbols = df_cc.columns.to_list()
+            list_from = []
+            list_to = []
+            list_corr_coeff = []
+            for i , sym_from in enumerate(list_symbols):
+                for sym_to in list_symbols:
+                    if sym_from != sym_to:
+                        corr_coef = df_cc.loc[sym_from, sym_to]
+                        if abs(corr_coef) > threshold:
+                            list_from.append(sym_from)
+                            list_to.append(sym_to) 
+                            list_corr_coeff.append(corr_coef)
+
+            # create df for constructing graph
+            df_graph = pd.DataFrame({'from':list_from, 'to':list_to, 
+                                    'corr coeff':list_corr_coeff})
+
+            G_crossed = nx.from_pandas_edgelist(df_graph, 'from', 'to')
+            return G_crossed
+    
 
     def construct_weighted_network(self,df, method, threshold):
         if method == 'pearson':
@@ -776,6 +861,61 @@ class Net_moduls(object):
         print('fixed_thr= '+str(fixed_thr))
 
         return avg_net_features_df_tot
+    
+    def get_network_features_averaged_median(self, df,regimes_column,method, edges_threshold,target_window , target_length, p_threshold = False):
+        target_win = target_window
+        regimes_df = self.get_regimes_DataFrames(df, regimes_column)
+        regimes_df = regimes_df[::-1]
+        for i , dfs in enumerate(regimes_df):
+            for wind in range(1, target_length):
+                if i==0 and wind == 1:
+                    if p_threshold:
+                        fixed_thr = p_threshold
+                    else:
+                        if method == 'pearson':
+                            fixed_thr =  self.find_median_pearson_threshold(dfs)
+                        elif method == 'entropy':
+                            fixed_thr =  self.find_median_entropy_threshold(dfs)
+                        # np.log(df.columns.size) * df.columns.size*
+                trained_G = self.construct_network(dfs[-target_win-wind:-wind], method ,fixed_thr)
+                dfs_net_features_df = self.get_network_features(trained_G)
+                if wind == 1:
+                    net_features_df = dfs_net_features_df
+                net_features_df.loc[wind] = dfs_net_features_df.values[0]
+            if i ==0:
+                avg_net_features_df_tot = pd.DataFrame(net_features_df.mean()).T
+            else: 
+                avg_net_features_df_tot.loc[2*i] = pd.DataFrame(net_features_df.mean()).T.values[0]
+
+            stds = []
+            for k in range(len(avg_net_features_df_tot.columns)):
+                stds.append(net_features_df[net_features_df.columns[k]].std())
+                
+            avg_net_features_df_tot.loc[2*i+1] = stds
+
+
+        avg_net_features_df_tot.index = np.tile(np.array(['Means', 'STDs']),len(regimes_df))
+        print('fixed_thr= '+str(fixed_thr))
+
+        return avg_net_features_df_tot
+    def plot_circos_network(self,network):
+        G =  network
+        for n, d in G.nodes(data=True):
+            if n == 'GDP' or n=='CPI' or n == 'M2' or n=='M1' or n =='Brent Oil':
+                G.nodes[n]['class'] = 'one'
+
+            elif n == 'Coin' or n == 'Euro' or n == 'USD' or n == 'Gold' or n == 'HOUSE':
+                G.nodes[n]['class'] = 'two'
+            else:
+                G.nodes[n]['class'] = 'three'
+            # G.nodes[n]['class'] = choice(['one', 'two', 'three'])
+
+
+        fig = plt.figure(figsize=(16,12))
+
+        c = CircosPlot(G, node_color="class", node_order='class', node_labels=True, group_label_color=True)
+
+        return c
 
         
 
