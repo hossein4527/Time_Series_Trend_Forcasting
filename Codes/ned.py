@@ -450,6 +450,23 @@ class Net_moduls(object):
         median_corr_coef = np.median(df_corr_flatten_nonNan)
         return median_corr_coef
     
+    def find_median_crossed_100_threshold(self,df):
+        cross_offsets = []
+        for i in range(len(df.columns)):
+            for j in range(len(df.columns)):
+                seconds = 5
+                fps = 5
+                rs = [self.crosscorr(df[df.columns[i]],df[df.columns[j]], lag) for lag in range(-int(seconds*fps),int(seconds*fps+1))]
+                offset = np.floor(len(rs)/2)-np.argmax(rs)
+                cross_offsets.append(offset)
+        cross_offsets = np.array(cross_offsets)
+        cross_offsets = cross_offsets[cross_offsets>0]
+        df_corr_flatten_nonNan = cross_offsets[~np.isnan(cross_offsets)]
+        df_corr_flatten_nonNan.sort()
+        df_corr_flatten_nonNan = df_corr_flatten_nonNan/max(df_corr_flatten_nonNan)
+        median_corr_coef = np.median(df_corr_flatten_nonNan)
+        return median_corr_coef
+    
     def find_ent_thr_period(self, df):
         te_list = []
         for c1 in range(df.columns.size):
@@ -547,6 +564,42 @@ class Net_moduls(object):
                 for j in range(len(df.columns)):
                     seconds = 5
                     fps = 30
+                    rs = [self.crosscorr(df[df.columns[i]],df[df.columns[j]], lag) for lag in range(-int(seconds*fps),int(seconds*fps+1))]
+                    offset = np.floor(len(rs)/2)-np.argmax(rs)
+                    cross_offsets.append(offset)
+            cross_offsets = np.array(cross_offsets)
+            cross_offsets = cross_offsets/max(cross_offsets)
+            crossed_offset_matrix = cross_offsets.reshape((df.shape[1],df.shape[1]))
+            crossed_df = pd.DataFrame(crossed_offset_matrix , columns=(df.columns)).set_index(df.columns)
+            df_cc = crossed_df
+
+
+            # apply corr coeff threshold and create new df
+            list_symbols = df_cc.columns.to_list()
+            list_from = []
+            list_to = []
+            list_corr_coeff = []
+            for i , sym_from in enumerate(list_symbols):
+                for sym_to in list_symbols:
+                    if sym_from != sym_to:
+                        corr_coef = df_cc.loc[sym_from, sym_to]
+                        if abs(corr_coef) > threshold:
+                            list_from.append(sym_from)
+                            list_to.append(sym_to) 
+                            list_corr_coeff.append(corr_coef)
+
+            # create df for constructing graph
+            df_graph = pd.DataFrame({'from':list_from, 'to':list_to, 
+                                    'corr coeff':list_corr_coeff})
+
+            G_crossed = nx.from_pandas_edgelist(df_graph, 'from', 'to')
+            return G_crossed
+        if method == 'crossed_100':
+            cross_offsets = []
+            for i in range(len(df.columns)):
+                for j in range(len(df.columns)):
+                    seconds = 5
+                    fps = 5
                     rs = [self.crosscorr(df[df.columns[i]],df[df.columns[j]], lag) for lag in range(-int(seconds*fps),int(seconds*fps+1))]
                     offset = np.floor(len(rs)/2)-np.argmax(rs)
                     cross_offsets.append(offset)
@@ -877,6 +930,8 @@ class Net_moduls(object):
                             fixed_thr =  self.find_median_pearson_threshold(dfs[-target_win-wind:-wind])
                         elif method == 'entropy':
                             fixed_thr =  self.find_median_entropy_threshold(dfs[-target_win-wind:-wind])
+                        elif method == 'crossed_100':
+                            fixed_thr =  self.find_median_crossed_100_threshold(dfs[-target_win-wind:-wind])
                         # np.log(df.columns.size) * df.columns.size*
                 trained_G = self.construct_network(dfs[-target_win-wind:-wind], method ,fixed_thr)
                 dfs_net_features_df = self.get_network_features(trained_G)
@@ -893,7 +948,6 @@ class Net_moduls(object):
                 stds.append(net_features_df[net_features_df.columns[k]].std())
                 
             avg_net_features_df_tot.loc[2*i+1] = stds
-
 
         avg_net_features_df_tot.index = np.tile(np.array(['Means', 'STDs']),len(regimes_df))
         print('fixed_thr= '+str(fixed_thr))
