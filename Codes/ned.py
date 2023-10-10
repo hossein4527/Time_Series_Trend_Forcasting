@@ -427,6 +427,7 @@ class Net_moduls(object):
                 te_list.append(te.calc_te(robjects.FloatVector(df[df.columns[c1]].values), robjects.FloatVector(df[df.columns[c2]].values))[0])
         te_list = np.array(te_list).reshape((df.columns.size, df.columns.size))
         df_corr_flatten = np.array(te_list).flatten()
+        df_corr_flatten = df_corr_flatten[df_corr_flatten>0]
         df_corr_flatten_nonNan = df_corr_flatten[~np.isnan(df_corr_flatten)]
         df_corr_flatten_nonNan.sort()
         median_corr_coef = np.median(df_corr_flatten_nonNan)
@@ -865,7 +866,7 @@ class Net_moduls(object):
     def get_network_features_averaged_median(self, df,regimes_column,method, edges_threshold,target_window , target_length, p_threshold = False):
         target_win = target_window
         regimes_df = self.get_regimes_DataFrames(df, regimes_column)
-        regimes_df = regimes_df[::-1]
+        regimes_df = regimes_df
         for i , dfs in enumerate(regimes_df):
             for wind in range(1, target_length):
                 if i==0 and wind == 1:
@@ -873,9 +874,9 @@ class Net_moduls(object):
                         fixed_thr = p_threshold
                     else:
                         if method == 'pearson':
-                            fixed_thr =  self.find_median_pearson_threshold(dfs)
+                            fixed_thr =  self.find_median_pearson_threshold(dfs[-target_win-wind:-wind])
                         elif method == 'entropy':
-                            fixed_thr =  self.find_median_entropy_threshold(dfs)
+                            fixed_thr =  self.find_median_entropy_threshold(dfs[-target_win-wind:-wind])
                         # np.log(df.columns.size) * df.columns.size*
                 trained_G = self.construct_network(dfs[-target_win-wind:-wind], method ,fixed_thr)
                 dfs_net_features_df = self.get_network_features(trained_G)
@@ -898,6 +899,7 @@ class Net_moduls(object):
         print('fixed_thr= '+str(fixed_thr))
 
         return avg_net_features_df_tot
+    
     def plot_circos_network(self,network):
         G =  network
         for n, d in G.nodes(data=True):
