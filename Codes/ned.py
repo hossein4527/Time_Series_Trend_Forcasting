@@ -808,6 +808,44 @@ class Net_moduls(object):
 
             G_crossed = nx.from_pandas_edgelist(df_graph, 'from', 'to')
             return G_crossed
+        
+        if method == 'crossed_':
+            cross_offsets = []
+            for i in range(len(df.columns)):
+                for j in range(len(df.columns)):
+                    seconds = 5
+                    fps = 30
+                    rs = [self.crosscorr(df[df.columns[i]],df[df.columns[j]], lag) for lag in range(-int(seconds*fps),int(seconds*fps+1))]
+                    offset = np.floor(len(rs)/2)-np.argmax(rs)
+                    cross_offsets.append(offset)
+            cross_offsets = np.array(cross_offsets)
+            cross_offsets = cross_offsets/max(cross_offsets)
+            crossed_offset_matrix = cross_offsets.reshape((df.shape[1],df.shape[1]))
+            crossed_df = pd.DataFrame(crossed_offset_matrix , columns=(df.columns)).set_index(df.columns)
+            df_cc = crossed_df
+
+
+            # apply corr coeff threshold and create new df
+            list_symbols = df_cc.columns.to_list()
+            list_from = []
+            list_to = []
+            list_corr_coeff = []
+            for i , sym_from in enumerate(list_symbols):
+                for sym_to in list_symbols:
+                    if sym_from != sym_to:
+                        corr_coef = df_cc.loc[sym_from, sym_to]
+                        if abs(corr_coef) < threshold:
+                            list_from.append(sym_from)
+                            list_to.append(sym_to)
+                            list_corr_coeff.append(corr_coef)
+
+            # create df for constructing graph
+            df_graph = pd.DataFrame({'from':list_from, 'to':list_to, 
+                                    'corr coeff':list_corr_coeff})
+
+            G_crossed = nx.from_pandas_edgelist(df_graph, 'from', 'to')
+            return G_crossed
+        
         if method == 'crossed_100':
             cross_offsets = []
             for i in range(len(df.columns)):
@@ -818,6 +856,8 @@ class Net_moduls(object):
                     offset = np.floor(len(rs)/2)-np.argmax(rs)
                     cross_offsets.append(offset)
             cross_offsets = np.array(cross_offsets)
+            cross_offsets = cross_offsets[cross_offsets>0]
+            cross_offsets = cross_offsets[~np.isnan(cross_offsets)]
             cross_offsets = cross_offsets/max(cross_offsets)
             crossed_offset_matrix = cross_offsets.reshape((df.shape[1],df.shape[1]))
             crossed_df = pd.DataFrame(crossed_offset_matrix , columns=(df.columns)).set_index(df.columns)
@@ -855,6 +895,8 @@ class Net_moduls(object):
                     offset = np.floor(len(rs)/2)-np.argmax(rs)
                     cross_offsets.append(offset)
             cross_offsets = np.array(cross_offsets)
+            cross_offsets = cross_offsets[cross_offsets>0]
+            cross_offsets = cross_offsets[~np.isnan(cross_offsets)]
             cross_offsets = cross_offsets/max(cross_offsets)
             crossed_offset_matrix = cross_offsets.reshape((df.shape[1],df.shape[1]))
             crossed_df = pd.DataFrame(crossed_offset_matrix , columns=(df.columns)).set_index(df.columns)
