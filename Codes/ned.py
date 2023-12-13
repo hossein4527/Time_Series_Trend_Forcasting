@@ -856,7 +856,7 @@ class Net_moduls(object):
                     offset = np.floor(len(rs)/2)-np.argmax(rs)
                     cross_offsets.append(offset)
             cross_offsets = np.array(cross_offsets)
-            cross_offsets = cross_offsets[cross_offsets>0]
+            # cross_offsets = cross_offsets[cross_offsets>0]
             cross_offsets = cross_offsets[~np.isnan(cross_offsets)]
             cross_offsets = cross_offsets/max(cross_offsets)
             crossed_offset_matrix = cross_offsets.reshape((df.shape[1],df.shape[1]))
@@ -894,8 +894,9 @@ class Net_moduls(object):
                     rs = [self.crosscorr(df[df.columns[i]],df[df.columns[j]], lag) for lag in range(-int(seconds*fps),int(seconds*fps+1))]
                     offset = np.floor(len(rs)/2)-np.argmax(rs)
                     cross_offsets.append(offset)
+
             cross_offsets = np.array(cross_offsets)
-            cross_offsets = cross_offsets[cross_offsets>0]
+            # cross_offsets = cross_offsets[cross_offsets>0]
             cross_offsets = cross_offsets[~np.isnan(cross_offsets)]
             cross_offsets = cross_offsets/max(cross_offsets)
             crossed_offset_matrix = cross_offsets.reshape((df.shape[1],df.shape[1]))
@@ -1224,6 +1225,8 @@ class Net_moduls(object):
                         elif method == 'entropy':
                             fixed_thr =  self.find_median_entropy_threshold(dfs[-target_win-wind:-wind])
                         elif method == 'crossed_100':
+                            fixed_thr =  self.find_median_crossed_100_threshold(dfs[-target_win-wind:-wind])
+                        elif method == 'crossed_100_':
                             fixed_thr =  self.find_median_crossed_100_threshold(dfs[-target_win-wind:-wind])
                         # np.log(df.columns.size) * df.columns.size*
                 trained_G = self.construct_network(dfs[-target_win-wind:-wind], method ,fixed_thr)
