@@ -1,0 +1,2 @@
+,radius,diameter,densities,number_of_edges,average_clustering,avg_degree_centrality,avg_betweenness_centrality,avg_closeness_centrality,average_shortest_path_length
+0,2,3,0.34879227053140094,361,0.4118846761428665,0.3487922705314009,0.014953886693017128,0.6090031971757411,1.6579710144927535
