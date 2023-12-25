@@ -1249,6 +1249,7 @@ class Net_moduls(object):
         print('fixed_thr= '+str(fixed_thr))
 
         return avg_net_features_df_tot
+
     
     def plot_circos_network(self,network):
         G =  network
