@@ -40,7 +40,7 @@ class VG_Modules_Model1(object):
         start_point = 31
         forcast_ts = np.zeros_like(time_serie)
         forcast_ts[:start_point] = time_serie[:start_point]
-        msn = self.most_similar_node(time_serie,T=20,tp=50)
+        msn = self.most_similar_node(time_serie,T=20,tp=30)
         for i in range(start_point-1,time_serie.shape[0]-1):
             dy = time_serie[i]-time_serie[msn[i]]
             y = time_serie[i]+dy/(i-msn[i])
